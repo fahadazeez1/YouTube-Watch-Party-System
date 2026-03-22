@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebSocket Test Client</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@5.0.0/bundles/stomp.umd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 10px; }
+        #messages { background: #f4f4f4; height: 200px; overflow-y: scroll; padding: 10px; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<h2>Watch Party Backend Tester</h2>
+
+<div class="box">
+    <label>Room ID: <input type="text" id="roomId" placeholder="Paste Room ID here" size="40"></label><br><br>
+    <label>Sender (User) ID: <input type="text" id="senderId" placeholder="Paste User ID here" size="40"></label><br><br>
+    <button onclick="connect()">1. Connect to Room</button>
+    <button onclick="disconnect()">Disconnect</button>
+</div>
+
+<div class="box">
+    <h3>Send Commands</h3>
+    <button onclick="sendEvent('PLAY')">Send PLAY</button>
+    <button onclick="sendEvent('PAUSE')">Send PAUSE</button>
+    <button onclick="sendEvent('CHANGE_VIDEO')">Change to new Video</button>
+</div>
+
+<div class="box">
+    <h3>Live Room Messages (Broadcasts)</h3>
+    <div id="messages"></div>
+</div>
+
+<script>
+    let stompClient = null;
+
+    function connect() {
+        const roomId = document.getElementById('roomId').value;
+        if(!roomId) { alert("Please enter a Room ID first!"); return; }
+
+        // 1. Connect to the Spring Boot WebSocket endpoint
+        const socket = new SockJS('http://localhost:8080/ws');
+        stompClient = new window.StompJs.Client({
+            webSocketFactory: () => socket,
+            debug: function (str) { console.log(str); },
+            onConnect: function (frame) {
+                logMessage("Connected to Server!");
+
+                // 2. Subscribe to the room's topic to listen for broadcasts
+                stompClient.subscribe('/topic/room/' + roomId, function (message) {
+                    logMessage("RECEIVED BROADCAST: " + message.body);
+                });
+            },
+            onStompError: function (frame) {
+                logMessage("Broker reported error: " + frame.headers['message']);
+            }
+        });
+        stompClient.activate();
+    }
+
+    function disconnect() {
+        if (stompClient !== null) {
+            stompClient.deactivate();
+        }
+        logMessage("Disconnected");
+    }
+
+    function sendEvent(eventType) {
+        const roomId = document.getElementById('roomId').value;
+        const senderId = document.getElementById('senderId').value;
+
+        if(!roomId || !senderId) { alert("Room ID and Sender ID are required!"); return; }
+
+        const payload = {
+            type: eventType,
+            currentTime: 12.5, // Fake time for testing
+            videoId: eventType === 'CHANGE_VIDEO' ? "new_youtube_id_123" : null,
+            senderId: senderId
+        };
+
+        // 3. Send the message to the Spring Boot controller (@MessageMapping)
+        stompClient.publish({
+            destination: '/app/room/' + roomId + '/sync',
+            body: JSON.stringify(payload)
+        });
+
+        logMessage("SENT: " + JSON.stringify(payload));
+    }
+
+    function logMessage(message) {
+        const messagesDiv = document.getElementById('messages');
+        messagesDiv.innerHTML += `<p>> ${message}</p>`;
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+</script>
+</body>
+</html>
