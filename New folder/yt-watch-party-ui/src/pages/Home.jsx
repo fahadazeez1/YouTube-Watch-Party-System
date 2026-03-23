@@ -4,7 +4,7 @@ import axios from 'axios';
 import { PlaySquare, Users } from 'lucide-react';
 
 export default function Home() {
-    const [mode, setMode] = useState('join'); // 'join' or 'host'
+    const [mode, setMode] = useState('join');  
     const [username, setUsername] = useState('');
     const [roomIdInput, setRoomIdInput] = useState('');
     const [error, setError] = useState('');

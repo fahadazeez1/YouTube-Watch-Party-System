@@ -142,8 +142,6 @@ export default function Room() {
         }
     };
 
-    // Because the Unmount logic inside useEffect handles the database deletion, 
-    // all we have to do now is navigate away!
     const handleLeaveClick = () => {
         navigate('/');
     };
