@@ -2,18 +2,20 @@ package com.example.app.yt.Model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
-import java.util.UUID;
+import lombok.Setter;
 
 @Entity
 @Table(name = "participants")
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 public class Participant {
 
     @Id
-    private String id = UUID.randomUUID().toString();
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
 
     private String username;
 

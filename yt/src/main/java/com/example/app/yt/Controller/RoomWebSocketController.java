@@ -6,6 +6,7 @@ import com.example.app.yt.Model.Role;
 import com.example.app.yt.Model.Room;
 import com.example.app.yt.Repository.ParticipantRepository;
 import com.example.app.yt.Repository.RoomRepository;
+import com.example.app.yt.Service.RoomSyncService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -14,79 +15,90 @@ import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Controller;
 
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Controller
 public class RoomWebSocketController {
 
     @Autowired
+    private ParticipantRepository participantRepository;
+
+    @Autowired
     private RoomRepository roomRepository;
 
     @Autowired
-    private ParticipantRepository participantRepository;
+    private RoomSyncService roomSyncService;
+
+    private final ConcurrentHashMap<String, Role> roleCache = new ConcurrentHashMap<>();
 
     @MessageMapping("/room/{roomId}/sync")
     @SendTo("/topic/room/{roomId}")
     public SyncMessage handleSyncEvent(@DestinationVariable String roomId, @Payload SyncMessage message) {
 
         if ("LEAVE_ROOM".equals(message.getType())) {
-            if (participantRepository.existsById(message.getSenderId())) {
-                participantRepository.deleteById(message.getSenderId());
-            }
+            participantRepository.deleteParticipantByIdFast(message.getSenderId());
+            roleCache.remove(message.getSenderId());
             return message;
         }
 
-        Optional<Participant> senderOpt = participantRepository.findById(message.getSenderId());
-        if (senderOpt.isEmpty()) {
+        Role senderRole = roleCache.computeIfAbsent(message.getSenderId(), id -> {
+            Optional<Participant> p = participantRepository.findById(id);
+            return p.map(Participant::getRole).orElse(null);
+        });
+
+        if (senderRole == null) {
             throw new RuntimeException("User not found");
         }
-
-        Participant sender = senderOpt.get();
 
         if ("USER_JOINED".equals(message.getType())) {
             return message;
         }
 
         if ("REMOVE_PARTICIPANT".equals(message.getType())) {
-            if (sender.getRole() != Role.HOST) {
+            if (senderRole != Role.HOST) {
                 throw new RuntimeException("Only the Host can remove participants");
             }
-            participantRepository.deleteById(message.getTargetUserId());
+            participantRepository.deleteParticipantByIdFast(message.getTargetUserId());
+            roleCache.remove(message.getTargetUserId());
             return message;
         }
 
         if ("ASSIGN_ROLE".equals(message.getType())) {
-            if (sender.getRole() != Role.HOST) {
+            if (senderRole != Role.HOST) {
                 throw new RuntimeException("Only the Host can assign roles");
             }
 
             Optional<Participant> targetOpt = participantRepository.findById(message.getTargetUserId());
             if (targetOpt.isPresent()) {
                 Participant target = targetOpt.get();
-                target.setRole(Role.valueOf(message.getNewRole()));
+                Role newRole = Role.valueOf(message.getNewRole());
+                target.setRole(newRole);
                 participantRepository.save(target);
+
+                roleCache.put(message.getTargetUserId(), newRole);
             }
             return message;
         }
 
-        if (sender.getRole() == Role.PARTICIPANT) {
+        if (senderRole == Role.PARTICIPANT) {
             throw new RuntimeException("Participants cannot control the video");
         }
 
-        Optional<Room> roomOpt = roomRepository.findById(roomId);
-        if (roomOpt.isPresent()) {
-            Room room = roomOpt.get();
-            if ("PLAY".equals(message.getType()) || "SEEK".equals(message.getType())) {
-                room.setPlaying(true);
-                room.setCurrentTime(message.getCurrentTime());
-            } else if ("PAUSE".equals(message.getType())) {
-                room.setPlaying(false);
-                room.setCurrentTime(message.getCurrentTime());
-            } else if ("CHANGE_VIDEO".equals(message.getType())) {
+        if ("PLAY".equals(message.getType()) || "SEEK".equals(message.getType())) {
+            roomSyncService.updateRoomState(roomId, null, true, message.getCurrentTime());
+        } else if ("PAUSE".equals(message.getType())) {
+            roomSyncService.updateRoomState(roomId, null, false, message.getCurrentTime());
+        } else if ("CHANGE_VIDEO".equals(message.getType())) {
+            // Update high-speed RAM
+            roomSyncService.updateRoomState(roomId, message.getVideoId(), false, 0.0);
+
+            // Persist major changes to DB
+            Optional<Room> roomOpt = roomRepository.findById(roomId);
+            if (roomOpt.isPresent()) {
+                Room room = roomOpt.get();
                 room.setCurrentVideoId(message.getVideoId());
-                room.setPlaying(false);
-                room.setCurrentTime(0.0);
+                roomRepository.save(room);
             }
-            roomRepository.save(room);
         }
 
         return message;
