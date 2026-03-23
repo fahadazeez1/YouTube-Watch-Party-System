@@ -25,7 +25,7 @@ export default function Room() {
 
     const fetchRoomData = useCallback(async () => {
         try {
-            const response = await axios.get(`http://localhost:8080/api/rooms/${roomId}`);
+            const response = await axios.get(`https://web3task-ytsys.onrender.com/api/rooms/${roomId}`);
             setVideoId(response.data.currentVideoId);
             setParticipants(response.data.participants);
         } catch (err) {
@@ -35,7 +35,7 @@ export default function Room() {
 
     const sendLeaveRequest = useCallback(() => {
         if (!user || !user.userId) return;
-        fetch(`http://localhost:8080/api/rooms/${roomId}/leave?userId=${user.userId}`, {
+        fetch(`https://web3task-ytsys.onrender.com/api/rooms/${roomId}/leave?userId=${user.userId}`, {
             method: 'POST',
             keepalive: true
         }).catch(err => console.error("Error leaving room", err));
@@ -49,7 +49,7 @@ export default function Room() {
 
         fetchRoomData();
 
-        const socket = new SockJS('http://localhost:8080/ws');
+        const socket = new SockJS('https://web3task-ytsys.onrender.com/ws');
         const client = new Client({
             webSocketFactory: () => socket,
             onConnect: () => {
@@ -142,8 +142,6 @@ export default function Room() {
         }
     };
 
-    // Because the Unmount logic inside useEffect handles the database deletion, 
-    // all we have to do now is navigate away!
     const handleLeaveClick = () => {
         navigate('/');
     };

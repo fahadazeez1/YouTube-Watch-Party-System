@@ -4,7 +4,7 @@ import axios from 'axios';
 import { PlaySquare, Users } from 'lucide-react';
 
 export default function Home() {
-    const [mode, setMode] = useState('join'); // 'join' or 'host'
+    const [mode, setMode] = useState('join');  
     const [username, setUsername] = useState('');
     const [roomIdInput, setRoomIdInput] = useState('');
     const [error, setError] = useState('');
@@ -21,11 +21,9 @@ export default function Home() {
 
         try {
             if (mode === 'host') {
-                // Call Spring Boot /create endpoint
-                const response = await axios.post(`http://localhost:8080/api/rooms/create?username=${username}`);
+                const response = await axios.post(`https://web3task-ytsys.onrender.com/api/rooms/create?username=${username}`);
                 const roomData = response.data;
                 
-                // Navigate to room and pass the user's details in memory state
                 navigate(`/room/${roomData.id}`, { 
                     state: { 
                         userId: roomData.participants[0].id, 
@@ -38,8 +36,7 @@ export default function Home() {
                     setError('Room ID is required to join');
                     return;
                 }
-                // Call Spring Boot /join endpoint
-                const response = await axios.post(`http://localhost:8080/api/rooms/${roomIdInput}/join?username=${username}`);
+                const response = await axios.post(`https://web3task-ytsys.onrender.com/api/rooms/${roomIdInput}/join?username=${username}`);
                 const participantData = response.data;
 
                 navigate(`/room/${roomIdInput}`, { 
